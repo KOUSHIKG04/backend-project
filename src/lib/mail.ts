@@ -60,7 +60,7 @@ export const emailVerification = (username: string, verificationUrl: string) => 
             name: username,
             intro: `Welcome ${username} We\'re very excited to have you on board.`,
             action: {
-                instructions: 'To get started with Mailgen, please click here:',
+                instructions: 'To get started with us!, please click here:',
                 button: {
                     color: '#ffa011ff',
                     text: 'Verify your account',

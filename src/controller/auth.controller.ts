@@ -38,7 +38,7 @@ const generateTokens = async (userId: number) => {
 
 export const registerUser = asyncHandler(async (req: Request, res: Response) => {
 
-    const { username, email, password, role, fullname, protocol, get } = req.body
+    const { username, email, password, role, fullname } = req.body
 
     const existingUser = await prisma.user.findFirst({
         where: { OR: [{ username }, { email }] }
@@ -61,7 +61,7 @@ export const registerUser = asyncHandler(async (req: Request, res: Response) => 
             email,
             password: hashedPassword,
             // isEmailVerified: false
-            emailVerificationToken : hashedToken,
+            emailVerificationToken: hashedToken,
             emailVerificationExpiry: new Date(tokenExpiry),
         }
     })
@@ -71,8 +71,28 @@ export const registerUser = asyncHandler(async (req: Request, res: Response) => 
         mailGenerator:
             emailVerification(
                 user.username,
-                `${protocol}:/${get("host")}/api/v1/users/${unHashedToken}`
+                `${req.protocol}://${req.get("host")}/api/v1/users/${unHashedToken}`
             )
     })
+
+
+    const { avatar, createdAt } = user
+    const createdUser = {
+        username: username,
+        email: email,
+        fullname: fullname,
+        avatar: avatar,
+        createdAt: createdAt
+    }
+    if (!createdUser) {
+        throw new ApiError(500, "Something went wrong while registering the user")
+    }
+
+    res.status(201).json(
+        new ApiResponse(201,
+            { user: createdUser },
+            `User registered successfully and verification mail is sent to your entered email`
+        )
+    )
 
 });
