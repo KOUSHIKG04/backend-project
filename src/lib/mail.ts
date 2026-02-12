@@ -17,8 +17,9 @@ export const sendMail = async (options: any) => {
         });
 
     try {
+        const { email, subject } = options
 
-        if (!options.email || !options.subject) {
+        if (!email || !subject) {
             throw new Error("Email and subject are required");
         }
 
@@ -40,8 +41,8 @@ export const sendMail = async (options: any) => {
             = await transporter.sendMail(
                 {
                     from: '"Task Manager" <noreply@taskmanager.com>',
-                    to: options.email,
-                    subject: options.subject,
+                    to: email,
+                    subject: subject,
                     text: emailTextual,
                     html: emailHTML,
                 })

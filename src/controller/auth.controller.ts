@@ -2,8 +2,10 @@ import { asyncHandler } from "@/lib/asyncHandler";
 import type { Request, Response } from "express";
 import { prisma } from "@/db"
 import { ApiError, ApiResponse } from "@/lib/apiResponses";
-import { generateAccessToken, generateRefreshToken, generateTemporaryToken, hashPassword } from "@/lib/auth";
+import { generateAccessToken, generateRefreshToken, generateTemporaryToken, hashPassword, verifyPassword } from "@/lib/auth";
 import { sendMail, emailVerification } from "@/lib/mail";
+import crypto from "crypto"
+
 
 const generateTokens = async (userId: number) => {
     try {
@@ -66,24 +68,19 @@ export const registerUser = asyncHandler(async (req: Request, res: Response) => 
         }
     })
 
+    const verificationUrl = `${req.protocol}://${req.get("host")}/api/v1/auth/verify-email/${unHashedToken}`;
+
     await sendMail({
-        email: user?.email, subject: "Please Do Email Verification",
-        mailGenerator:
-            emailVerification(
-                user.username,
-                `${req.protocol}://${req.get("host")}/api/v1/users/${unHashedToken}`
-            )
+        email:
+            user?.email, subject: "Please Do Email Verification",
+        mailGenerator: emailVerification(user.username, verificationUrl)
     })
 
 
     const { avatar, createdAt } = user
-    const createdUser = {
-        username: username,
-        email: email,
-        fullname: fullname,
-        avatar: avatar,
-        createdAt: createdAt
-    }
+
+    const createdUser = { username, email, fullname, avatar, createdAt }
+
     if (!createdUser) {
         throw new ApiError(500, "Something went wrong while registering the user")
     }
@@ -96,3 +93,123 @@ export const registerUser = asyncHandler(async (req: Request, res: Response) => 
     )
 
 });
+
+
+export const userLogin = asyncHandler(async (req: Request, res: Response) => {
+
+    const { email, username, password } = req.body
+
+    if (!username && !email) {
+        throw new ApiError(400, "Username or Email is required")
+    }
+
+    const user = await prisma.user.findFirst({
+        where: {
+            OR: [
+                username ? { username } : {}, email ? { email } : {}
+            ].filter(obj => Object.keys(obj).length > 0)
+        }
+    })
+
+    if (!user) {
+        throw new ApiError(404, "User does not exist, Please Create account");
+    }
+
+    const isVerifiedPassword = await verifyPassword(password, user.password);
+
+    if (!isVerifiedPassword) {
+        throw new ApiError(401, "Invalid user credentials");
+    }
+
+    const {
+        accessToken,
+        refreshToken
+    } = await generateTokens(user.id);
+
+    const loggedInUser = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: {
+            id: true, email: true, username: true, fullname: true, createdAt: true
+        }
+    })
+
+    const options = { httpOnly: true, secure: true }
+
+    res.status(200)
+        .cookie("accessToken", accessToken, options).cookie("refreshToken", refreshToken, options)
+        .json(
+            new ApiResponse(
+                200,
+                { user: loggedInUser, accessToken, refreshToken },
+                "User logged In Successfully"
+            )
+        )
+})
+
+
+export const userLogout = asyncHandler(async (req: Request, res: Response) => {
+
+    await prisma.user.update({
+        where: {
+            id: (req as any).user.id
+        },
+        data: {
+            refreshToken: null
+        }
+    })
+
+    const options = { httpOnly: true, secure: true }
+
+    res.status(200)
+        .clearCookie("accessToken", options).clearCookie("refreshToken", options)
+        .json(new ApiResponse(200, {}, "User logged Out Successfully"))
+})
+
+
+export const getCurrentUser = asyncHandler(async (req: Request, res: Response) => {
+    res.status(200)
+        .json(new ApiResponse(200,
+            (req as any).user,
+            "User fetched successfully")
+        )
+})
+
+export const verifyEmail = asyncHandler(async (req: Request, res: Response) => {
+    const { verificationToken } = req.params
+
+    if (!verificationToken) {
+        throw new ApiError(400, "Email verification token is missing");
+    }
+
+    let hashedToken = crypto
+        .createHash("SHA256")
+        .update(verificationToken as string)
+        .digest("hex")
+
+    const user = await prisma.user.findFirst({
+        where: {
+            emailVerificationToken: hashedToken,
+        }
+    })
+
+    if (!user) {
+        throw new ApiError(400, "Token is invalid");
+    }
+
+    if (user.emailVerificationExpiry && user.emailVerificationExpiry < new Date()) {
+        throw new ApiError(400, "Token is expired");
+    }
+
+    await prisma.user.update({
+        where: {
+            id: user.id
+        },
+        data: {
+            isEmailVerified: true, emailVerificationToken: null, emailVerificationExpiry: null
+        }
+    })
+
+    res.status(200).json(
+        new ApiResponse(200, {}, "Email verified successfully")
+    )
+})

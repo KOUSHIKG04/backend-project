@@ -1,5 +1,6 @@
 import express, { urlencoded } from 'express';
 import cors from "cors";
+import cookieParser from "cookie-parser";
 
 const application = express();
 
@@ -17,6 +18,7 @@ application.use(urlencoded({
     limit: "16kb",
     extended: true
 }))
+application.use(cookieParser())
 // application.use(express.static("public"))
 
 application.get('/', (req, res) => {

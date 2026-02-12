@@ -24,10 +24,8 @@ class ApiResponse {
 
 class ApiError extends Error {
     statusCode: number;
-    success: boolean
-    data: any
-    error: any[];
-    override stack?: string
+    success: boolean; error: any[];
+    data: any; override stack?: string
 
     constructor(statusCode: number, message: string = "Something went wrong", error: any[] = [], stack = '') {
         super(message)

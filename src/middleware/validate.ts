@@ -6,21 +6,20 @@ export const validate =
     (schema: ZodSchema) =>
         async (req: Request, res: Response, next: NextFunction) => {
             try {
-                const { body, query, params } = req
-                await schema.parseAsync({ body: body, query: query, params: params, });
+                const { body, query, params } = req;
+                await schema.parseAsync({ body, query, params });
                 return next();
             } catch (error) {
                 if (error instanceof ZodError) {
-                    const errors = (error as any).errors.map((e: any) => ({
+                    const errors = error.issues.map((e) => ({
                         field: e.path.join("."),
                         message: e.message,
                     }));
 
-                    // Respond with ApiError structure
                     const apiError = new ApiError(400, "Validation Error", errors);
                     res.status(apiError.statusCode).json(apiError);
                     return;
                 }
-                return next(error);
+                next(error);
             }
         };
