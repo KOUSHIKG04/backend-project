@@ -5,6 +5,8 @@ import { ApiError, ApiResponse } from "@/lib/apiResponses";
 import { generateAccessToken, generateRefreshToken, generateTemporaryToken, hashPassword, verifyPassword } from "@/lib/auth";
 import { sendMail, emailVerification } from "@/lib/mail";
 import crypto from "crypto"
+import jwt from "jsonwebtoken";
+
 
 
 const generateTokens = async (userId: number) => {
@@ -212,4 +214,93 @@ export const verifyEmail = asyncHandler(async (req: Request, res: Response) => {
     res.status(200).json(
         new ApiResponse(200, {}, "Email verified successfully")
     )
+})
+
+
+
+export const resendEmailVerification = asyncHandler(async (req: Request, res: Response) => {
+
+    const userId = (req as any).user?.id
+
+    if (!userId) {
+        throw new ApiError(401, "Unauthorized request");
+    }
+
+    const user = await prisma.user.findUnique({
+        where: { id: userId }
+    })
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    if (user.isEmailVerified) {
+        throw new ApiError(400, "Email is already verified");
+    }
+
+    const { unHashedToken, hashedToken, tokenExpiry }
+        = generateTemporaryToken()
+
+    await prisma.user.update({
+        where: { id: user.id },
+        data: {
+            emailVerificationToken: hashedToken, emailVerificationExpiry: new Date(tokenExpiry)
+        }
+    })
+
+    const verificationUrl = `${req.protocol}://${req.get("host")}/api/v1/auth/verify-email/${unHashedToken}`;
+
+    await sendMail({
+        email: user?.email, subject: "Resend Email Verification",
+        mailGenerator: emailVerification(user.username, verificationUrl)
+    })
+
+    res.status(200).json(
+        new ApiResponse(200, {}, "Verification email resent successfully")
+    )
+})
+
+
+export const refreshAccessToken = asyncHandler(async (req: Request, res: Response) => {
+    
+    const incomingRefreshToken = req.cookies?.refreshToken || req.body.refreshToken;
+
+    if (!incomingRefreshToken) {
+        throw new ApiError(401, "Unauthorized request");
+    }
+
+    try {
+        const decodedToken = jwt.verify(
+            incomingRefreshToken,
+            process.env.REFRESH_TOKEN_SECRET as string
+        ) as jwt.JwtPayload;
+
+        const user = await prisma.user.findUnique({
+            where: { id: decodedToken?._id }
+        })
+
+        if (!user) {
+            throw new ApiError(401, "Invalid refresh token");
+        }
+
+        if (incomingRefreshToken !== user?.refreshToken) {
+            throw new ApiError(401, "Refresh token is expired or used");
+        }
+
+        const { accessToken, refreshToken: newRefreshToken } = await generateTokens(user.id);
+
+        const options = { httpOnly: true, secure: true }
+
+        res.status(200)
+            .cookie("accessToken", accessToken, options).cookie("refreshToken", newRefreshToken, options)
+            .json(
+                new ApiResponse(
+                    200,
+                    { accessToken, refreshToken: newRefreshToken },
+                    "Access token refreshed"
+                )
+            )
+    } catch (error) {
+        throw new ApiError(401, (error as Error)?.message || "Invalid refresh token");
+    }
 })
