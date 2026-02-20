@@ -74,7 +74,7 @@ export const emailVerification = (username: string, verificationUrl: string) => 
 }
 
 
-export const forgotPassword = (username: string, resetPasswordUrl: string) => {
+export const forgotPasswordEmailVerification = (username: string, resetPasswordUrl: string) => {
     return {
         body: {
             name: username,

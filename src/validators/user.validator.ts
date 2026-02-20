@@ -44,3 +44,29 @@ export const loginUserSchema = z.object({
 });
 
 export type LoginUserInput = z.infer<typeof loginUserSchema>["body"];
+
+
+export const forgotPasswordSchema = z.object({
+    body: z.object({
+        email: z.email({ message: "Invalid email address" }),
+    }),
+});
+
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>["body"];
+
+export const resetPasswordSchema = z.object({
+    body: z.object({
+        newPassword: z.string().min(6, { message: "Password must be at least 6 characters long" }),
+    }),
+});
+
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>["body"];
+
+export const changePasswordSchema = z.object({
+    body: z.object({
+        oldPassword: z.string().min(1, { message: "Old password is required" }),
+        newPassword: z.string().min(6, { message: "New password must be at least 6 characters long" }),
+    }),
+});
+
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>["body"];
